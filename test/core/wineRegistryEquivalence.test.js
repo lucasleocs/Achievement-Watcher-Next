@@ -174,3 +174,41 @@ test('a same-length replacement with a restored mtime invalidates the snapshot',
   assert.deepEqual(candidate.readValue(file, 'Software/Change', 'Value'), reference.readValue(file, 'Software/Change', 'Value'));
   fs.unlinkSync(moved);
 });
+
+
+test('whole-hive cache evicts least-recently-used files while retaining current results', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'aw-reg-lru-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const files = [];
+  const originalRead = fs.readFileSync;
+  let descriptorReads = 0;
+
+  fs.readFileSync = function (file, ...args) {
+    if (typeof file === 'number') descriptorReads++;
+    return originalRead.call(this, file, ...args);
+  };
+
+  try {
+    for (let i = 0; i < 50; i++) {
+      const file = path.join(directory, 'hive-' + i + '.reg');
+      fs.writeFileSync(file, 'WINE REGISTRY Version 2\n[Software\\\\LRU]\n"Value"="' + i + '"\n');
+      files.push(file);
+      assert.deepEqual(candidate.readValue(file, 'Software/LRU', 'Value'),
+        { type: 'REG_SZ', value: String(i) });
+    }
+
+    const beforeEvictedRead = descriptorReads;
+    assert.deepEqual(candidate.readValue(files[0], 'Software/LRU', 'Value'),
+      reference.readValue(files[0], 'Software/LRU', 'Value'));
+    assert.equal(descriptorReads, beforeEvictedRead + 1,
+      'oldest hive must be re-read when the global limit is exceeded');
+
+    const beforeRecentRead = descriptorReads;
+    assert.deepEqual(candidate.readValue(files[49], 'Software/LRU', 'Value'),
+      reference.readValue(files[49], 'Software/LRU', 'Value'));
+    assert.equal(descriptorReads, beforeRecentRead,
+      'recently accessed hive should still be cached');
+  } finally {
+    fs.readFileSync = originalRead;
+  }
+});

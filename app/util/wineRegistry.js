@@ -8,7 +8,11 @@ const fs = require('fs');
   string and DWORD values are decoded: that is all the save-root lookups need.
 */
 
+// Bound the retained snapshots across all Wine prefixes without restricting reads.
 const cache = new Map();
+const MAX_CACHED_HIVES = 48;
+const MAX_CACHED_BYTES = 96 * 1024 * 1024;
+let cachedBytes = 0;
 // Values map -> the key as spelled in the hive, and value -> its name as spelled, for listings
 // (lookups ignore case).
 const keyNames = new WeakMap();
@@ -186,13 +190,32 @@ function readStableSnapshot(file) {
   throw error;
 }
 
+function dropCachedHive(file) {
+  const hit = cache.get(file);
+  if (!hit) return;
+  cachedBytes -= hit.bytes.length;
+  cache.delete(file);
+}
+
 function loadHive(file) {
   let stat;
-  try { stat = fs.statSync(file); } catch { cache.delete(file); return null; }
+  try { stat = fs.statSync(file); } catch { dropCachedHive(file); return null; }
   const hit = cache.get(file);
-  if (sameFileStamp(hit, stat)) return hit;
+  if (sameFileStamp(hit, stat)) {
+    // Update recency without changing the memory budget.
+    cache.delete(file);
+    cache.set(file, hit);
+    return hit;
+  }
+  dropCachedHive(file);
   const fresh = readStableSnapshot(file);
-  cache.set(file, fresh);
+  if (fresh.bytes.length <= MAX_CACHED_BYTES) {
+    cache.set(file, fresh);
+    cachedBytes += fresh.bytes.length;
+    while (cache.size > MAX_CACHED_HIVES || cachedBytes > MAX_CACHED_BYTES) {
+      dropCachedHive(cache.keys().next().value);
+    }
+  }
   return fresh;
 }
 
