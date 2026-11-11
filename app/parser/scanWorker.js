@@ -83,6 +83,25 @@ const methods = {
     const games = await parser().reloadGames(option, records, (game) => post({ type: 'game', id, game }));
     return { count: games.length };
   },
+  async findSmartFolders() {
+    const started = Date.now();
+    const result = await load('util/smartFindDiscovery.js').discoverSmartFolders({
+      userDir: load('parser/userDir.js'),
+      libraryDirs: load('parser/libraryDirs.js'),
+    });
+    const usage = process.memoryUsage();
+    const heapLimit = require('node:v8').getHeapStatistics().heap_size_limit;
+    const mib = (bytes) => Math.round((bytes / 1048576) * 10) / 10;
+    return {
+      ...result,
+      diagnostics: {
+        durationMs: Date.now() - started,
+        heapUsedMiB: mib(usage.heapUsed),
+        rssMiB: mib(usage.rss),
+        heapLimitMiB: mib(heapLimit),
+      },
+    };
+  },
   detectInstalledAppids: (id, option) => parser().detectInstalledAppids(option),
   discoveryInputsUnchanged: () => parser().discoveryInputsUnchanged(),
   scanInputsUnchanged: (id, fingerprint) => parser().scanInputsUnchanged(fingerprint),

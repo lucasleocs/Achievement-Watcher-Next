@@ -78,6 +78,26 @@ test('a reload with no host runs here', async (t) => {
   assert.equal(streamed.length, 1);
 });
 
+test('Smart Find is answered by the host with accepted and rejected folders', async (t) => {
+  const { host } = hostFor(t);
+  const result = await host.findSmartFolders();
+  assert.deepEqual(result.saveEntries.map(({ entry, accepted }) => [entry.path, accepted]), [
+    ['/save/valid', true],
+    ['/save/invalid', false],
+  ]);
+  assert.deepEqual(result.libraryEntries, [{ path: '/games', detector: 'Known games folder' }]);
+});
+
+test('Smart Find never falls back to the renderer when its host cannot start', async (t) => {
+  let ranLocally = false;
+  const { host } = hostFor(t, {
+    local: { findSmartFolders: () => { ranLocally = true; return {}; } },
+    workerFile: path.join(__dirname, 'no-such-smart-find-worker.js'),
+  });
+  await assert.rejects(host.findSmartFolders(), (err) => err.code === 'SCAN_HOST_GONE');
+  assert.equal(ranLocally, false);
+});
+
 test('a parser asking the main process is answered through this one, and a missing route is refused, not left hanging', async (t) => {
   const sent = [];
   const { host } = hostFor(t, {
