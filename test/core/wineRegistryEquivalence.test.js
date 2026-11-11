@@ -212,3 +212,74 @@ test('whole-hive cache evicts least-recently-used files while retaining current 
     fs.readFileSync = originalRead;
   }
 });
+
+
+test('global byte budget evicts earlier snapshots without changing reads', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aw-reg-byte-budget-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const files = [];
+  const largeChunk = Buffer.alloc(1024 * 1024, 65);
+  const originalRead = fs.readFileSync;
+  let descriptorReads = 0;
+
+  // Each file occupies 21 MiB of raw snapshot space, so five exceed the 96 MiB
+  // global cache limit while each file individually remains cacheable.
+  for (let i = 0; i < 5; i++) {
+    const file = path.join(dir, 'large-' + i + '.reg');
+    const fd = fs.openSync(file, 'w');
+    try {
+      fs.writeSync(fd, 'WINE REGISTRY Version 2\n[Software\\\\Large]\n"Index"="' + i + '"\n#');
+      for (let chunk = 0; chunk < 21; chunk++) fs.writeSync(fd, largeChunk);
+    } finally {
+      fs.closeSync(fd);
+    }
+    files.push(file);
+  }
+
+  fs.readFileSync = function (file, ...args) {
+    if (typeof file === 'number') descriptorReads++;
+    return originalRead.call(this, file, ...args);
+  };
+  try {
+    for (let i = 0; i < files.length; i++) {
+      assert.deepEqual(candidate.readValue(files[i], 'Software/Large', 'Index'),
+        { type: 'REG_SZ', value: String(i) });
+    }
+    const afterCold = descriptorReads;
+    assert.deepEqual(candidate.readValue(files[4], 'Software/Large', 'Index'),
+      { type: 'REG_SZ', value: '4' });
+    assert.equal(descriptorReads, afterCold, 'newest snapshot should remain cached');
+
+    assert.deepEqual(candidate.readValue(files[0], 'Software/Large', 'Index'),
+      reference.readValue(files[0], 'Software/Large', 'Index'));
+    assert.equal(descriptorReads, afterCold + 1, 'oldest snapshot must be evicted by byte budget');
+  } finally {
+    fs.readFileSync = originalRead;
+  }
+});
+
+test('atomic replacement during snapshot reading cannot mix file generations', (t) => {
+  const file = temporaryHive(t, '[Software\\\\Atomic]\n"Value"="old"\n');
+  const replacement = file + '.next';
+  const originalRead = fs.readFileSync;
+  let switched = false;
+  fs.readFileSync = function (source, ...args) {
+    if (!switched && typeof source === 'number') {
+      const bytes = originalRead.call(this, source, ...args);
+      fs.writeFileSync(replacement, '[Software\\\\Atomic]\n"Value"="new"\n');
+      fs.renameSync(replacement, file);
+      switched = true;
+      return bytes;
+    }
+    return originalRead.call(this, source, ...args);
+  };
+  try {
+    assert.deepEqual(candidate.readValue(file, 'Software/Atomic', 'Value'),
+      { type: 'REG_SZ', value: 'new' });
+    assert.equal(switched, true, 'a replacement was simulated during the read');
+    assert.deepEqual(candidate.readValue(file, 'Software/Atomic', 'Value'),
+      reference.readValue(file, 'Software/Atomic', 'Value'));
+  } finally {
+    fs.readFileSync = originalRead;
+  }
+});
