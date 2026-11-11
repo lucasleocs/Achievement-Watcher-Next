@@ -104,7 +104,8 @@ const scanHost = createScanHost(scanHostOptions);
 // Smart Find uses a short-lived scan host: no Wine cache survives the operation,
 // and an OOM cannot trigger a repeat of this discovery in the renderer.
 async function findSmartFoldersOffThread() {
-  const finder = createScanHost(scanHostOptions);
+  // Smart Find reads local discovery data; unlike a library scan, it does not need the install secret.
+  const finder = createScanHost({ ...scanHostOptions, secret: () => '' });
   try {
     const result = await finder.findSmartFolders();
     if (result.diagnostics) {
