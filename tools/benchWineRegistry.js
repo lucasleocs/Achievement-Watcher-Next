@@ -17,7 +17,8 @@ const registry = mode === 'reference'
   ? require('../test/helpers/wineRegistryReference.js')
   : require('../app/util/wineRegistry.js');
 
-const files = [...new Set(discoverPrefixes().flatMap(({ path: prefix }) =>
+const prefixes = discoverPrefixes();
+const files = [...new Set(prefixes.flatMap(({ path: prefix }) =>
   ['user.reg', 'system.reg'].map((name) => path.join(prefix, name))))]
   .filter((file) => fs.existsSync(file));
 const operations = [
@@ -69,7 +70,7 @@ if (global.gc) global.gc();
 const retainedAfterWarm = memory();
 console.log(JSON.stringify({
   mode,
-  prefixes: files.length / 2,
+  prefixes: prefixes.length,
   registryFiles: files.length,
   queriesPerPass: files.length * operations.length,
   cold, retainedAfterCold, warm, retainedAfterWarm,
