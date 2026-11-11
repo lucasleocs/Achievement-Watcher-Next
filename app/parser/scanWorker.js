@@ -85,6 +85,9 @@ const methods = {
   },
   async findSmartFolders() {
     const started = Date.now();
+    // The regular scan initializes parser configuration and user-data paths first.
+    // Smart Find needs the same context even though it runs in a one-shot host.
+    parser();
     const result = await load('util/smartFindDiscovery.js').discoverSmartFolders({
       userDir: load('parser/userDir.js'),
       libraryDirs: load('parser/libraryDirs.js'),

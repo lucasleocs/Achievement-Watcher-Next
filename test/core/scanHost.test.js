@@ -18,6 +18,7 @@ const { forkNode } = require('../../app/util/nodeProcess.js');
 const { makeTempDir } = require('../helpers/tempDir');
 
 const FAKE_WORKER = path.join(__dirname, '..', 'helpers', 'scanHostFakeWorker.js');
+const SMART_FIND_CRASH_WORKER = path.join(__dirname, '..', 'helpers', 'scanHostSmartFindCrashWorker.js');
 const games = (...ids) => ids.map((appid) => ({ appid, name: `Game ${appid}` }));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -94,6 +95,16 @@ test('Smart Find never falls back to the renderer when its host cannot start', a
   const { host } = hostFor(t, {
     local: { findSmartFolders: () => { ranLocally = true; return {}; } },
     workerFile: path.join(__dirname, 'no-such-smart-find-worker.js'),
+  });
+  await assert.rejects(host.findSmartFolders(), (err) => err.code === 'SCAN_HOST_GONE');
+  assert.equal(ranLocally, false);
+});
+
+test('Smart Find does not fall back to the renderer if its host dies during discovery', async (t) => {
+  let ranLocally = false;
+  const { host } = hostFor(t, {
+    local: { findSmartFolders: () => { ranLocally = true; return {}; } },
+    workerFile: SMART_FIND_CRASH_WORKER,
   });
   await assert.rejects(host.findSmartFolders(), (err) => err.code === 'SCAN_HOST_GONE');
   assert.equal(ranLocally, false);
