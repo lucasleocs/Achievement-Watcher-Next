@@ -127,16 +127,16 @@ test('a large synthetic hive preserves enumeration order, aliases and non-ASCII 
 test('repeated sections separated by other sections merge values and preserve latest spelling', (t) => {
   const file = temporaryHive(t, [
     'WINE REGISTRY Version 2',
-    '[Software\\A\\child]',
+    '[Software\\\\A\\\\child]',
     '"Old"="first"',
-    '[Software\\other]',
+    '[Software\\\\other]',
     '"Unrelated"=dword:00000001',
-    '[SOFTWARE\\a\\CHILD]',
+    '[SOFTWARE\\\\a\\\\CHILD]',
     '"NEW"="second"',
     '"old"="third"',
-    '[Software\\A\\next]',
+    '[Software\\\\A\\\\next]',
     '"Here"="yes"',
-    '[SOFTWARE\\A\\CHILD]',
+    '[SOFTWARE\\\\A\\\\CHILD]',
     '@="default"',
   ].join('\n'));
   assertEquivalent(file, ['Software', 'Software/A', 'Software/a/child', 'Software/A/next'],
@@ -147,7 +147,7 @@ test('repeated sections separated by other sections merge values and preserve la
 test('value cache eviction does not change query results or ordering', (t) => {
   const rows = ['WINE REGISTRY Version 2'];
   for (let i = 0; i < 140; i++) {
-    rows.push('[Software\\Eviction\\Item' + i + ']');
+    rows.push('[Software\\\\Eviction\\\\Item' + i + ']');
     rows.push('"Readable"="value-' + i + '"');
     rows.push('"Ordinal"=dword:' + i.toString(16).padStart(8, '0'));
   }
@@ -163,12 +163,12 @@ test('value cache eviction does not change query results or ordering', (t) => {
 });
 
 test('a same-length replacement with a restored mtime invalidates the snapshot', (t) => {
-  const file = temporaryHive(t, '[Software\\Change]\n"Value"="aaaa"\n');
+  const file = temporaryHive(t, '[Software\\\\Change]\n"Value"="aaaa"\n');
   const initial = fs.statSync(file);
   assert.deepEqual(candidate.readValue(file, 'Software/Change', 'Value'), { type: 'REG_SZ', value: 'aaaa' });
   const moved = file + '.previous';
   fs.renameSync(file, moved);
-  fs.writeFileSync(file, '[Software\\Change]\n"Value"="bbbb"\n');
+  fs.writeFileSync(file, '[Software\\\\Change]\n"Value"="bbbb"\n');
   fs.utimesSync(file, initial.atime, initial.mtime);
   assert.deepEqual(candidate.readValue(file, 'Software/Change', 'Value'), { type: 'REG_SZ', value: 'bbbb' });
   assert.deepEqual(candidate.readValue(file, 'Software/Change', 'Value'), reference.readValue(file, 'Software/Change', 'Value'));
