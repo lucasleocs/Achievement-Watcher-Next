@@ -4,7 +4,8 @@
   The library scan runs in a process of its own (app/util/scanHost.js forks
   app/parser/scanWorker.js). These tests drive the client against a stand-in worker that speaks the
   same protocol, so what is checked is the plumbing: streaming, the IPC relay, events, and above all
-  that a host that is missing or dies never costs the library - the scan then runs here instead.
+  that a host that is missing or dies never costs the library - the library scan then runs
+  here instead. Smart Find deliberately has no renderer fallback.
 */
 
 const { test } = require('node:test');
